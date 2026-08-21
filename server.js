@@ -1,6 +1,7 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 
 const root = __dirname;
 const port = Number(process.env.PORT || 3000);
@@ -8,6 +9,7 @@ const airwallexBaseUrl = process.env.AIRWALLEX_BASE_URL || 'https://api.sandbox.
 const airwallexClientId = process.env.AIRWALLEX_CLIENT_ID || '';
 const airwallexApiKey = process.env.AIRWALLEX_API_KEY || '';
 const airwallexAccountId = process.env.AIRWALLEX_ACCOUNT_ID || '';
+const airwallexWebhookSecret = process.env.AIRWALLEX_WEBHOOK_SECRET || '';
 const airwallexApiVersion = process.env.AIRWALLEX_API_VERSION || '2026-07-17';
 let accessToken = null;
 let accessTokenExpiresAt = 0;
@@ -19,6 +21,14 @@ const types = {
   '.css': 'text/css; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8'
 };
+
+function verifyWebhookSignature(rawBody, timestamp, signature) {
+  if (!airwallexWebhookSecret || !timestamp || !signature) return false;
+  const expected = crypto.createHmac('sha256', airwallexWebhookSecret).update(`${timestamp}${rawBody}`).digest('hex');
+  const actual = Buffer.from(signature, 'utf8');
+  const expectedBuffer = Buffer.from(expected, 'utf8');
+  return actual.length === expectedBuffer.length && crypto.timingSafeEqual(actual, expectedBuffer);
+}
 
 async function getAirwallexToken() {
   if (accessToken && Date.now() < accessTokenExpiresAt - 60_000) return accessToken;
@@ -59,6 +69,28 @@ async function createPaymentLink(order) {
 }
 
 const server = http.createServer((req, res) => {
+  if (req.method === 'POST' && req.url === '/api/airwallex/webhook') {
+    let raw = '';
+    req.on('data', chunk => { raw += chunk; });
+    req.on('end', () => {
+      const timestamp = req.headers['x-timestamp'];
+      const signature = req.headers['x-signature'];
+      if (!verifyWebhookSignature(raw, timestamp, signature)) {
+        res.writeHead(401, { 'Content-Type': 'application/json; charset=utf-8' });
+        return res.end(JSON.stringify({ error: 'Invalid webhook signature' }));
+      }
+      try {
+        const event = JSON.parse(raw || '{}');
+        console.log(`Airwallex webhook received: ${event.name || 'unknown'} ${event.id || ''}`);
+        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+        return res.end(JSON.stringify({ received: true }));
+      } catch {
+        res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
+        return res.end(JSON.stringify({ error: 'Invalid JSON' }));
+      }
+    });
+    return;
+  }
   if (req.method === 'POST' && req.url === '/api/create-payment-link') {
     let raw = '';
     req.on('data', chunk => { raw += chunk; });
