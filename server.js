@@ -30,7 +30,7 @@ async function getAirwallexToken() {
     headers: authHeaders
   });
   const data = await response.json();
-  if (!response.ok || !data.token) throw new Error(data.message || 'Airwallex authentication failed');
+  if (!response.ok || !data.token) throw new Error(`Airwallex auth ${response.status}: ${data.code || data.message || 'no token returned'}`);
   accessToken = data.token;
   accessTokenExpiresAt = data.expires_at ? Date.parse(data.expires_at) : Date.now() + 25 * 60_000;
   return accessToken;
@@ -54,7 +54,7 @@ async function createPaymentLink(order) {
     })
   });
   const data = await response.json();
-  if (!response.ok || !data.url) throw new Error(data.message || 'Airwallex payment link creation failed');
+  if (!response.ok || !data.url) throw new Error(`Airwallex payment link ${response.status}: ${data.code || data.message || 'no checkout URL returned'}`);
   return data;
 }
 
