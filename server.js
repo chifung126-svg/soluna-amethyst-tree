@@ -7,6 +7,7 @@ const port = Number(process.env.PORT || 3000);
 const airwallexBaseUrl = process.env.AIRWALLEX_BASE_URL || 'https://api.sandbox.airwallex.com';
 const airwallexClientId = process.env.AIRWALLEX_CLIENT_ID || '';
 const airwallexApiKey = process.env.AIRWALLEX_API_KEY || '';
+const airwallexAccountId = process.env.AIRWALLEX_ACCOUNT_ID || '';
 const airwallexApiVersion = process.env.AIRWALLEX_API_VERSION || '2026-07-17';
 let accessToken = null;
 let accessTokenExpiresAt = 0;
@@ -22,9 +23,11 @@ const types = {
 async function getAirwallexToken() {
   if (accessToken && Date.now() < accessTokenExpiresAt - 60_000) return accessToken;
   if (!airwallexClientId || !airwallexApiKey) throw new Error('Airwallex credentials are not configured');
+  const authHeaders = { 'x-client-id': airwallexClientId, 'x-api-key': airwallexApiKey };
+  if (airwallexAccountId) authHeaders['x-login-as'] = airwallexAccountId;
   const response = await fetch(`${airwallexBaseUrl}/api/v1/authentication/login`, {
     method: 'POST',
-    headers: { 'x-client-id': airwallexClientId, 'x-api-key': airwallexApiKey }
+    headers: authHeaders
   });
   const data = await response.json();
   if (!response.ok || !data.token) throw new Error(data.message || 'Airwallex authentication failed');
